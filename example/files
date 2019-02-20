@@ -1,4 +1,0 @@
-../src/interface/i2c_if.sv
-../src/interface/i2c_int_if.sv
-../src/rtl/i2c_ext_connector.sv
-./i2c_example.sv

@@ -11,7 +11,7 @@ module i2c_master_phy#(
   output logic         data_o,
   output logic         cmd_done_o,
   output logic         arb_lost_o,
-  output logic         bus_busy_o
+  output logic         bus_busy_o,
   input                sda_i,
   output logic         sda_o,
   output logic         sda_oe,
@@ -71,7 +71,7 @@ enum logic [4 : 0] { IDLE_S,
                      READ_SCL_LOW_1_S,
                      WRITE_SCL_LOW_0_S,
                      WRITE_SCL_HIGH_0_S,
-                     WRTIE_SCL_HIGH_1_S,
+                     WRITE_SCL_HIGH_1_S,
                      WRITE_SCL_LOW_1_S } state, next_state;
 
 always_ff @( posedge clk_i, posedge rst_i )
@@ -108,7 +108,7 @@ always_comb
       READ_SCL_HIGH_0_S:  next_state = READ_SCL_HIGH_1_S;
       READ_SCL_HIGH_1_S:  next_state = READ_SCL_LOW_1_S;
       READ_SCL_LOW_1_S:   next_state = IDLE_S;
-      WRTIE_SCL_LOW_0_S:  next_state = WRITE_SCL_HIGH_0_S;
+      WRITE_SCL_LOW_0_S:  next_state = WRITE_SCL_HIGH_0_S;
       WRITE_SCL_HIGH_0_S: next_state = WRITE_SCL_HIGH_1_S;
       WRITE_SCL_HIGH_1_S: next_state = WRITE_SCL_LOW_1_S;
       WRITE_SCL_LOW_1_S:  next_state = IDLE_S;
@@ -134,11 +134,10 @@ always_ff @( posedge clk_i, posedge rst_i )
       spk_flt_scl <= '1;
     end
   else
-    if( 
-      begin
-        spk_flt_sda <= { spk_flt_sda[1 : 0], mstb_sda[1] };
-        spk_flt_scl <= { spk_flt_scl[1 : 0], mstb_scl[1] };
-      end
+    begin
+      spk_flt_sda <= { spk_flt_sda[1 : 0], mstb_sda[1] };
+      spk_flt_scl <= { spk_flt_scl[1 : 0], mstb_scl[1] };
+    end
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -265,14 +264,14 @@ always_ff @( posedge clk_i, posedge rst_i )
       WRITE_SCL_LOW_0_S: sda_oe <= ~data_i;
     endcase
 
-always_ff @ posedge clk_i, posedge rst_i )
+always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     scl_oe <= 1'b0;
   else
     case( state )
       START_SCL_HIGH_S:   scl_oe <= 1'b0;
       START_SCL_LOW_S:    scl_oe <= 1'b1;
-      STOP_SCL_HIGH_S:    scl_oe <= 1'b0;
+      STOP_SCL_HIGH_0_S:  scl_oe <= 1'b0;
       READ_SCL_LOW_0_S:   scl_oe <= 1'b1;
       READ_SCL_HIGH_0_S:  scl_oe <= 1'b0;
       READ_SCL_LOW_1_S:   scl_oe <= 1'b1;

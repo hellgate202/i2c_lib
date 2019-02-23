@@ -115,6 +115,8 @@ always_comb
     endcase
   end
 
+assign cmd_done_o         = state != IDLE_S && next_state == IDLE_S && next_state_allowed;
+
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     begin
@@ -210,7 +212,8 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( cmd_i == STOP && next_state_allowed )
       stop_req <= 1'b1;
     else
-      stop_req <= 1'b0;
+      if( next_state_allowed )
+        stop_req <= 1'b0;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )

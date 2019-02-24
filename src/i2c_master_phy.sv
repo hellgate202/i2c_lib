@@ -115,7 +115,7 @@ always_comb
     endcase
   end
 
-assign cmd_done_o         = state != IDLE_S && next_state == IDLE_S && next_state_allowed;
+assign cmd_done_o = state != IDLE_S && next_state == IDLE_S && next_state_allowed;
 
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -265,7 +265,6 @@ always_ff @( posedge clk_i, posedge rst_i )
       STOP_SDA_HIGH_S:   sda_oe <= 1'b0;
       READ_SCL_LOW_0_S:  sda_oe <= 1'b0;
       WRITE_SCL_LOW_0_S: sda_oe <= ~data_i;
-      default:           sda_oe <= 1'b0;
     endcase
 
 always_ff @( posedge clk_i, posedge rst_i )
@@ -282,7 +281,6 @@ always_ff @( posedge clk_i, posedge rst_i )
       WRITE_SCL_LOW_0_S:  scl_oe <= 1'b1;
       WRITE_SCL_HIGH_0_S: scl_oe <= 1'b0;
       WRITE_SCL_LOW_1_S:  scl_oe <= 1'b1;
-      default:            scl_oe <= 1'b0;
     endcase
 
 endmodule

@@ -1,9 +1,3 @@
-/*
-  This is refactored I2C Master PHY. It was re-writen in
-  SystemVerilog for educational purposes. Original can ber found
-  https://opencores.org/projects/i2c
-*/
-
 import i2c_pkg::*;
 
 module i2c_master_phy#(

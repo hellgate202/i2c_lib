@@ -37,7 +37,7 @@ localparam int SMPL_CNT_WIDTH   = $clog2( TICKS_PER_SAMPLE );
 localparam int STATE_CNT_WIDTH  = $clog2( TICKS_PER_STATE );
 
 // Metastability protection
-(* ASYNC_REG = "TRUE" *) logic [1 : 0] mstb_sda, mstb_scl;
+logic [1 : 0] mstb_sda, mstb_scl;
 // Spike noise protection
 logic [2 : 0]                   spk_flt_sda, spk_flt_scl;
 // Actual value of bus signals

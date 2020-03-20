@@ -1,4 +1,4 @@
-import i2c_pkg::*;
+import i2c_master_pkg::*;
 
 module i2c_master_phy#(
   parameter int SCL_FREQ = 400_000,

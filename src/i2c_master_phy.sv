@@ -27,10 +27,14 @@ module i2c_master_phy#(
   output logic         scl_oe
 );
 
+// In picoseconds
 localparam int CLK_T            = 64'd1_000_000_000_000 / CLK_FREQ;
 localparam int SCL_T            = 64'd1_000_000_000_000 / SCL_FREQ;
+// How many ticks in one SCL period
 localparam int TICKS_PER_SCL_T  = SCL_T / CLK_T;
+// Because 4 READ/WRITE states + IDLE
 localparam int TICKS_PER_STATE  = TICKS_PER_SCL_T / 5;
+// Oversampling x16
 localparam int TICKS_PER_SAMPLE = TICKS_PER_SCL_T / 16;
 
 localparam int SMPL_CNT_WIDTH   = $clog2( TICKS_PER_SAMPLE );
@@ -55,7 +59,7 @@ logic [STATE_CNT_WIDTH - 1 : 0] state_cnt;
 logic                           next_state_allowed;
 // Indicates that slave is holding SCL lane
 logic                           scl_stretch;
-// First tick of when we actualy lowered SCL lane
+// SCL is driven by other Master
 logic                           scl_driven;
 // Indicates that STOP command was required
 logic                           stop_req;
@@ -65,11 +69,13 @@ logic                           stop_detected;
 logic                           start_detected;
 
 assign sample_lane        = sample_cnt == TICKS_PER_SAMPLE;
-assign next_state_allowed = state_cnt == TICKS_PER_SAMPLE || scl_driven;
+assign next_state_allowed = state_cnt == TICKS_PER_STATE;
 // High level is provided by pull-up on the board, and high-Z output enable
 assign scl_o              = 1'b0;
 assign sda_o              = 1'b0;
-
+// We tried to pull SCL high (!scl_oe) but we detect a negedge
+// Another master drives it low, to synchronize clock with it
+// we reset state transition counter
 assign scl_driven         = scl_d && !scl && !scl_oe;
 
 // FSM to create level transitions on I2C lanes
@@ -125,26 +131,30 @@ always_comb
       IDLE_S:
         begin
           case( cmd_i )
-            START:   next_state = START_SDA_HIGH_S;
-            STOP:    next_state = STOP_SDA_LOW_S;
-            READ:    next_state = READ_SCL_LOW_0_S;
-            WRITE:   next_state = WRITE_SCL_LOW_0_S;
-            default: next_state = IDLE_S;
+            i2c_master_pkg::START: next_state = START_SDA_HIGH_S;
+            i2c_master_pkg::STOP:  next_state = STOP_SDA_LOW_S;
+            i2c_master_pkg::READ:  next_state = READ_SCL_LOW_0_S;
+            i2c_master_pkg::WRITE: next_state = WRITE_SCL_LOW_0_S;
+            default:               next_state = IDLE_S;
           endcase
         end
+      // Start condition
       START_SDA_HIGH_S:   next_state = START_SCL_HIGH_S;
       START_SCL_HIGH_S:   next_state = START_SDA_LOW_0_S;
       START_SDA_LOW_0_S:  next_state = START_SDA_LOW_1_S;
       START_SDA_LOW_1_S:  next_state = START_SCL_LOW_S;
       START_SCL_LOW_S:    next_state = IDLE_S;
+      // Stop condition
       STOP_SDA_LOW_S:     next_state = STOP_SCL_HIGH_0_S;
       STOP_SCL_HIGH_0_S:  next_state = STOP_SCL_HIGH_1_S;
       STOP_SCL_HIGH_1_S:  next_state = STOP_SDA_HIGH_S;
       STOP_SDA_HIGH_S:    next_state = IDLE_S;
+      // Read bit
       READ_SCL_LOW_0_S:   next_state = READ_SCL_HIGH_0_S;
       READ_SCL_HIGH_0_S:  next_state = READ_SCL_HIGH_1_S;
       READ_SCL_HIGH_1_S:  next_state = READ_SCL_LOW_1_S;
       READ_SCL_LOW_1_S:   next_state = IDLE_S;
+      // Write bit
       WRITE_SCL_LOW_0_S:  next_state = WRITE_SCL_HIGH_0_S;
       WRITE_SCL_HIGH_0_S: next_state = WRITE_SCL_HIGH_1_S;
       WRITE_SCL_HIGH_1_S: next_state = WRITE_SCL_LOW_1_S;
@@ -155,6 +165,7 @@ always_comb
 // We return to IDLE after competition of every task
 assign cmd_done_o = state != IDLE_S && next_state == IDLE_S && next_state_allowed;
 
+// Metastability protection, 2 ticks delay
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     begin
@@ -167,6 +178,7 @@ always_ff @( posedge clk_i, posedge rst_i )
       mstb_scl <= { mstb_scl[0], scl_i };
     end
 
+// Spike filter, 3 tick delay
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     begin
@@ -198,6 +210,7 @@ always_ff @( posedge clk_i, posedge rst_i )
                  ( spk_flt_scl[0] && spk_flt_scl[2] ) );
       end
 
+// 1 tick delay for edge detection
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     begin
@@ -210,6 +223,7 @@ always_ff @( posedge clk_i, posedge rst_i )
       scl_d <= scl;
     end
 
+// Counter for oversampling
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     sample_cnt <= '0;
@@ -219,6 +233,8 @@ always_ff @( posedge clk_i, posedge rst_i )
     else
       sample_cnt <= sample_cnt + 1'b1;
 
+// Counter for state transitions
+// scl_driven force us to count state again
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     state_cnt <= '0;
@@ -242,7 +258,7 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     scl_stretch <= 1'b0;
   else
-    if( !scl_oe && scl_oe_d && !scl )
+    if( !scl_oe && !scl_oe_d && !scl )
       scl_stretch <= 1'b1;
     else
       if( scl )
@@ -255,7 +271,7 @@ always_ff @( posedge clk_i, posedge rst_i )
     if( cmd_i == STOP && next_state_allowed )
       stop_req <= 1'b1;
     else
-      if( next_state_allowed )
+      if( state == STOP_SDA_HIGH_S && next_state_allowed )
         stop_req <= 1'b0;
 
 // Detects SDA transitions during high SCL

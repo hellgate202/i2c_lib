@@ -16,7 +16,11 @@ module i2c_master_phy#(
   output logic         cmd_done_o,
   // Arbitration lost and comand didn't completes
   output logic         arb_lost_o,
-  // Commands are not acknolage when this signal is high
+  // Unable to pull SDA down, when requested
+  output logic         sda_err_o,
+  // Unable to pull SCL down, when requested
+  output logic         scl_err_o,
+  // Commands are not acknolaged when this signal is high
   output logic         bus_busy_o,
   // I2C signals to tri-state buffers
   input                sda_i,
@@ -121,8 +125,11 @@ always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
     state <= IDLE_S;
   else
-    if( next_state_allowed )
-      state <= next_state;
+    if( arb_lost_o || sda_err_o || scl_err_o )
+      state <= IDLE_S;
+    else
+      if( next_state_allowed )
+        state <= next_state;
 
 always_comb
   begin
@@ -163,7 +170,7 @@ always_comb
   end
 
 // We return to IDLE after competition of every task
-assign cmd_done_o = state != IDLE_S && next_state == IDLE_S && next_state_allowed;
+assign cmd_done_o = state != IDLE_S && next_state == IDLE_S;
 
 // Metastability protection, 2 ticks delay
 always_ff @( posedge clk_i, posedge rst_i )
@@ -300,6 +307,34 @@ always_ff @( posedge clk_i, posedge rst_i )
     else
       arb_lost_o <= 1'b0;
 
+// When we try to lower SDA but it stays high
+// Possible when there are issues with connections or
+// pull-ups
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    sda_err_o <= 1'b0;
+  else
+    if( ( state == START_SCL_LOW_S && sda ) ||
+        ( state == WRITE_SCL_HIGH_1_S && sda_oe && sda ) )
+      sda_err_o <= 1'b1;
+    else
+      sda_err_o <= 1'b0;
+
+// The same for SCL
+always_ff @( posedge clk_i, posedge rst_i )
+  if( rst_i )
+    scl_err_o <= 1'b0;
+  else
+    // We should also check at start condition, but
+    // it will be too complex
+    // So we check it during READ/WRITE bit operations
+    // scl should already low eithere from start condition
+    // or from previousr READ/WRITE bit operation 
+    if( scl && ( state == READ_SCL_LOW_0_S || WRITE_SCL_LOW_0_S ) )
+      scl_err_o <= 1'b1;
+    else
+      scl_err_o <= 1'b0;
+
 // Bus is busy between start and stop transitions
 always_ff @( posedge clk_i, posedge rst_i )
   if( rst_i )
@@ -331,6 +366,7 @@ always_ff @( posedge clk_i, posedge rst_i )
       STOP_SDA_HIGH_S:   sda_oe <= 1'b0;
       READ_SCL_LOW_0_S:  sda_oe <= 1'b0;
       WRITE_SCL_LOW_0_S: sda_oe <= !data_i;
+      default;
     endcase
 
 always_ff @( posedge clk_i, posedge rst_i )
@@ -347,6 +383,7 @@ always_ff @( posedge clk_i, posedge rst_i )
       WRITE_SCL_LOW_0_S:  scl_oe <= 1'b1;
       WRITE_SCL_HIGH_0_S: scl_oe <= 1'b0;
       WRITE_SCL_LOW_1_S:  scl_oe <= 1'b1;
+      default;
     endcase
 
 endmodule
